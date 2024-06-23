@@ -1,0 +1,8 @@
+{
+    "nombre": "Prueba",
+    "edad": 3,
+    "hobbies": ["leer", "escribir", "programar"]
+    "direccion": {
+        "ciudad": "Asuncion"
+        "pais": "Paraguay"
+    },

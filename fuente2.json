@@ -1,0 +1,12 @@
+{
+   "personas":[  
+      {  
+         "ci":1A,
+         "nombre":"Juan Pérez",
+         "casado":false,
+         "hijos":[  
+
+         ]
+      }
+    ]
+}
