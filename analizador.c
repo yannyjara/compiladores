@@ -40,6 +40,11 @@ typedef struct {
     char lexeme[MAX_LENGTH];
 } Token;
 
+// Variables globales
+Token currentToken;
+FILE *file;
+FILE *outputFile;
+
 int obtenerSiguiente(FILE *file, Token *token) {
     int c;
 
@@ -90,23 +95,23 @@ int obtenerSiguiente(FILE *file, Token *token) {
                 token->type = BOOL_TRUE;
             } else if (strcmp(buffer, "false") == 0) {
                 token->type = BOOL_FALSE;
+            } else if (strcmp(buffer, "null") == 0) {
+                token->type = PR_NULL;
             } else {
                 printf("Error lexico: Token no reconocido: %s\n", buffer);
+                fprintf(outputFile, "<error>Error lexico: Token no reconocido: %s</error>\n", buffer);
                 continue;
             }
             return 1;
         } else {
             printf("Error lexico: Caracter desconocido: %c\n", c);
+            fprintf(outputFile, "<error>Error lexico: Caracter desconocido: %c</error>\n", c);
             continue; // Continuar con la siguiente línea
         }
         return 1;
     }
     return 0; // Fin del archivo
 }
-
-// Variables globales
-Token currentToken;
-FILE *file;
 
 void obtenerSiguienteToken() {
     if (!obtenerSiguiente(file, &currentToken)) {
@@ -116,8 +121,17 @@ void obtenerSiguienteToken() {
 
 void error(char *mensaje) {
     printf("Error sintactico: %s en el token %s\n", mensaje, tokenNames[currentToken.type]);
+    fprintf(outputFile, "<error>Error sintactico: %s en el token %s</error>\n", mensaje, tokenNames[currentToken.type]);
 }
 
+void sincronizar() {
+    while (currentToken.type != COMA && currentToken.type != CIERRA_CORCHETE && currentToken.type != DER_LLAVE && currentToken.type != EOF_TOKEN) {
+        obtenerSiguienteToken();
+    }
+    if (currentToken.type == COMA || currentToken.type == CIERRA_CORCHETE || currentToken.type == DER_LLAVE) {
+        obtenerSiguienteToken();
+    }
+}
 
 void verificar_valor();
 
@@ -129,25 +143,19 @@ void verificar_objeto() {
             return;
         }
         while (currentToken.type == CADENA) {
+            char key[MAX_LENGTH];
+            strcpy(key, currentToken.lexeme);
             obtenerSiguienteToken();
             if (currentToken.type != DOS_PUNTOS) {
                 error("Se esperaba ':'");
                 // Intentar sincronizar con el siguiente valor válido
-                while (currentToken.type != COMA && currentToken.type != DER_LLAVE && currentToken.type != EOF_TOKEN) {
-                    obtenerSiguienteToken();
-                }
-                if (currentToken.type == COMA) {
-                    obtenerSiguienteToken();
-                    continue;
-                }
-                if (currentToken.type == DER_LLAVE) {
-                    obtenerSiguienteToken();
-                    return;
-                }
+                sincronizar();
                 return;
             }
             obtenerSiguienteToken();
+            fprintf(outputFile, "<%s>", key);
             verificar_valor();
+            fprintf(outputFile, "</%s>\n", key);
             if (currentToken.type == COMA) {
                 obtenerSiguienteToken();
                 continue;
@@ -156,33 +164,19 @@ void verificar_objeto() {
                 return;
             } else {
                 error("Se esperaba ',' o '}'");
-                // Intentar sincronizar con el siguiente valor válido
-                while (currentToken.type != COMA && currentToken.type != DER_LLAVE && currentToken.type != EOF_TOKEN) {
-                    obtenerSiguienteToken();
-                }
-                if (currentToken.type == COMA) {
-                    obtenerSiguienteToken();
-                    continue;
-                }
-                if (currentToken.type == DER_LLAVE) {
-                    obtenerSiguienteToken();
-                    return;
-                }
+                sincronizar();
                 return;
             }
         }
         if (currentToken.type != DER_LLAVE) {
             error("Se esperaba '}'");
-            // Intentar sincronizar con el siguiente valor válido
-            while (currentToken.type != DER_LLAVE && currentToken.type != EOF_TOKEN) {
-                obtenerSiguienteToken();
-            }
-            if (currentToken.type == DER_LLAVE) {
-                obtenerSiguienteToken();
-            }
+            sincronizar();
+        }else {
+            obtenerSiguienteToken();
         }
     } else {
         error("Se esperaba '{'");
+        sincronizar();
     }
 }
 
@@ -195,7 +189,10 @@ void verificar_array() {
             return;
         }
         while (1) {
+            fprintf(outputFile, "<item>\n");
             verificar_valor();
+            fprintf(outputFile, "</item>\n");
+
             if (currentToken.type == COMA) {
                 obtenerSiguienteToken();
                 continue;
@@ -204,23 +201,13 @@ void verificar_array() {
                 return;
             } else {
                 error("Se esperaba ',' o ']'");
-                // Intentar sincronizar con el siguiente valor válido
-                while (currentToken.type != COMA && currentToken.type != CIERRA_CORCHETE && currentToken.type != EOF_TOKEN) {
-                    obtenerSiguienteToken();
-                }
-                if (currentToken.type == COMA) {
-                    obtenerSiguienteToken();
-                    continue;
-                }
-                if (currentToken.type == CIERRA_CORCHETE) {
-                    obtenerSiguienteToken();
-                    return;
-                }
+                sincronizar();
                 return;
             }
         }
     } else {
         error("Se esperaba '['");
+        sincronizar();
     }
 }
 
@@ -228,15 +215,19 @@ void verificar_array() {
 void verificar_valor() {
     switch (currentToken.type) {
         case CADENA:
+            fprintf(outputFile, "%s", currentToken.lexeme);
             obtenerSiguienteToken();
             break;
         case NUMERO:
+            fprintf(outputFile, "%s", currentToken.lexeme);
             obtenerSiguienteToken();
             break;
         case BOOL_TRUE:
+            fprintf(outputFile, "true");
             obtenerSiguienteToken();
             break;
         case BOOL_FALSE:
+            fprintf(outputFile, "false");
             obtenerSiguienteToken();
             break;
         case PR_NULL:
@@ -250,14 +241,7 @@ void verificar_valor() {
             break;
         default:
             error("Valor no valido");
-            obtenerSiguienteToken();
-            // Intentar sincronizar con el siguiente valor válido
-            while (currentToken.type != COMA && currentToken.type != CIERRA_CORCHETE && currentToken.type != DER_LLAVE && currentToken.type != EOF_TOKEN) {
-                obtenerSiguienteToken();
-            }
-            if (currentToken.type == COMA) {
-                obtenerSiguienteToken();
-            }
+            sincronizar();
     }
 }
 
@@ -274,6 +258,7 @@ void verificar_json() {
 
 int main() {
     char filename[MAX_LENGTH];
+    char outputFilename[MAX_LENGTH];
     printf("Ingrese el nombre del archivo a analizar: \n");
     printf("Obs: el archivo debe encontrarse en la misma carpeta. \n");
     scanf("%s", filename);
@@ -285,9 +270,19 @@ int main() {
         return 1;
     }
 
+    printf("Ingrese el nombre del archivo XML de salida: \n");
+    scanf("%s", outputFilename);
+    outputFile = fopen(outputFilename, "w");
+    if (outputFile == NULL) {
+        perror("Error al abrir el archivo XML de salida");
+        fclose(file);
+        return 1;
+    }
+
     verificar_json();
 
     fclose(file);
+    fclose(outputFile);
 
     return 0;
 }
